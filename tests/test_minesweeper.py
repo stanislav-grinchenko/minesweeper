@@ -59,3 +59,8 @@ def test_is_winner():
             if (r, c) not in game.mines:
                 game.reveal(r, c)
     assert game.is_winner() == True
+
+
+# tests/test_minesweeper.py
+def test_fail():
+    assert False
