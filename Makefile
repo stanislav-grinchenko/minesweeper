@@ -1,4 +1,4 @@
 .PHONY: tests
 tests:
 	@echo "Running tests..."
-	@PYTHONPATH=. pytest -v
+	@PYTHONPATH=src pytest -v
