@@ -56,7 +56,7 @@ def test_game_over(game):
 
 
 def test_win_condition(game):
-    # Simulate all cells except mines being revealed
+    # Simulate all cells except mines being revealed!
     game.revealed = set(
         (r, c) for r in range(5) for c in range(5) if (r, c) not in game.mines
     )
