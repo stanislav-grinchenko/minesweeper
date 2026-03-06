@@ -10,25 +10,177 @@
 
 <body>
   <div class="container">
-    <h1>Minesweeper</h1>
-    <p class="message">{{ message }}</p>
-    <a href="{{ url_for('restart') }}" class="button">Restart Game</a>
-    <table>
-      {% for row_idx in range(board|length) %}
-      <tr>
-        {% for col_idx in range(board[row_idx]|length) %}
-        <td class="{{ 'revealed' if board[row_idx][col_idx] != ' ' else 'hidden' }}">
-          {% if board[row_idx][col_idx] == ' ' %}
-          <a href="{{ url_for('reveal', row=row_idx, col=col_idx) }}">?</a>
-          {% else %}
-          {{ board[row_idx][col_idx] }}
-          {% endif %}
-        </td>
-        {% endfor %}
-      </tr>
-      {% endfor %}
-    </table>
+    <h1>💣 Minesweeper</h1>
+
+    <div class="controls">
+      <div class="presets">
+        <button class="btn btn-preset" onclick="newGame(9,9,10)">Easy</button>
+        <button class="btn btn-preset" onclick="newGame(16,16,40)">Medium</button>
+        <button class="btn btn-preset" onclick="newGame(16,30,99)">Hard</button>
+      </div>
+      <form class="custom-form" onsubmit="startCustomGame(event)">
+        <input type="number" id="inp-rows" placeholder="Rows" min="2" max="30" value="9">
+        <input type="number" id="inp-cols" placeholder="Cols" min="2" max="50" value="9">
+        <input type="number" id="inp-mines" placeholder="Mines" min="1" value="10">
+        <button class="btn" type="submit">New Game</button>
+      </form>
+    </div>
+
+    <div class="status-bar">
+      <div class="stat">🚩 <span id="flags-left">10</span></div>
+      <div id="message" class="message"></div>
+      <div class="stat">⏱ <span id="timer">0</span>s</div>
+    </div>
+
+    <div id="board-wrap">
+      <table id="board"></table>
+    </div>
   </div>
+
+  <script>
+    const NUM_COLORS = ['', '#0000ff', '#007b00', '#ff0000', '#00007b', '#7b0000', '#007b7b', '#000000', '#7b7b7b'];
+
+    let timerInterval = null;
+    let seconds = 0;
+    let gameActive = false;
+
+    function startTimer() {
+      if (timerInterval) return;
+      timerInterval = setInterval(() => {
+        seconds++;
+        document.getElementById('timer').textContent = seconds;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    function resetTimer() {
+      stopTimer();
+      seconds = 0;
+      document.getElementById('timer').textContent = '0';
+    }
+
+    async function fetchJSON(url, body) {
+      const opts = body
+        ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+        : {};
+      const res = await fetch(url, opts);
+      return res.json();
+    }
+
+    function renderBoard(state) {
+      const table = document.getElementById('board');
+      const msg = document.getElementById('message');
+      table.innerHTML = '';
+
+      document.getElementById('flags-left').textContent = state.flags_left;
+
+      if (state.game_over) {
+        msg.textContent = '🥲 Game Over!';
+        msg.className = 'message lose';
+        stopTimer();
+        gameActive = false;
+      } else if (state.won) {
+        msg.textContent = '🎉 You Win!';
+        msg.className = 'message win';
+        stopTimer();
+        gameActive = false;
+      } else {
+        msg.textContent = '';
+        msg.className = 'message';
+      }
+
+      const cellSize = getCellSize(state.rows, state.cols);
+
+      state.board.forEach((row, r) => {
+        const tr = document.createElement('tr');
+        row.forEach((cell, c) => {
+          const td = document.createElement('td');
+          td.style.width = cellSize;
+          td.style.height = cellSize;
+          td.style.fontSize = getFontSize(state.rows, state.cols);
+
+          if (cell === '') {
+            td.className = 'hidden';
+            if (!state.game_over && !state.won) {
+              td.addEventListener('click', () => onReveal(r, c));
+              td.addEventListener('contextmenu', e => { e.preventDefault(); onFlag(r, c); });
+            }
+          } else if (cell === '🚩') {
+            td.className = 'flagged';
+            td.textContent = '🚩';
+            if (!state.game_over && !state.won) {
+              td.addEventListener('contextmenu', e => { e.preventDefault(); onFlag(r, c); });
+            }
+          } else if (cell === '💣') {
+            td.className = 'mine';
+            td.textContent = '💣';
+          } else {
+            td.className = 'revealed';
+            if (cell !== 0 && cell !== '0') {
+              td.textContent = cell;
+              td.style.color = NUM_COLORS[parseInt(cell)] || '#333';
+            }
+          }
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+    }
+
+    function getCellSize(rows, cols) {
+      const max = Math.max(rows, cols);
+      if (max <= 10) return '40px';
+      if (max <= 18) return '30px';
+      return '24px';
+    }
+
+    function getFontSize(rows, cols) {
+      const max = Math.max(rows, cols);
+      if (max <= 10) return '1.2rem';
+      if (max <= 18) return '0.95rem';
+      return '0.75rem';
+    }
+
+    async function onReveal(row, col) {
+      if (!gameActive) return;
+      startTimer();
+      const state = await fetchJSON('/api/reveal', { row, col });
+      renderBoard(state);
+    }
+
+    async function onFlag(row, col) {
+      if (!gameActive) return;
+      const state = await fetchJSON('/api/flag', { row, col });
+      renderBoard(state);
+    }
+
+    async function newGame(rows, cols, mines) {
+      resetTimer();
+      gameActive = true;
+      const state = await fetchJSON('/api/new-game', { rows, cols, mines });
+      renderBoard(state);
+    }
+
+    function startCustomGame(e) {
+      e.preventDefault();
+      const rows = parseInt(document.getElementById('inp-rows').value) || 9;
+      const cols = parseInt(document.getElementById('inp-cols').value) || 9;
+      const mines = parseInt(document.getElementById('inp-mines').value) || 10;
+      newGame(rows, cols, mines);
+    }
+
+    async function init() {
+      gameActive = true;
+      const state = await fetchJSON('/api/state');
+      renderBoard(state);
+    }
+
+    init();
+  </script>
 </body>
 
 </html>
